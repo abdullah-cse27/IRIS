@@ -1,0 +1,9 @@
+groq==1.7.0
+fastapi
+uvicorn[standard]
+pydantic-settings
+sqlalchemy
+python-multipart
+pymupdf
+python-docx
+tavily-python
