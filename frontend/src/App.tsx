@@ -1,6 +1,6 @@
-import AuthPage from './AuthPage'
+﻿import AuthPage from './AuthPage'
 import ProfilePage from './ProfilePage'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   getDocuments,
   getCurrentUser,
@@ -168,7 +168,7 @@ function readSavedChats(): ChatSession[] {
 function makeChatTitle(messages: ChatMessage[]): string {
   const firstQuestion = messages.find((item) => item.role === 'user')?.content
   if (!firstQuestion) return 'New conversation'
-  return firstQuestion.length > 32 ? `${firstQuestion.slice(0, 32).trim()}…` : firstQuestion
+  return firstQuestion.length > 32 ? `${firstQuestion.slice(0, 32).trim()}â€¦` : firstQuestion
 }
 
 
@@ -200,58 +200,60 @@ function App() {
   const [deletingDocumentId, setDeletingDocumentId] = useState<number | null>(null)
   const [documentDeleteError, setDocumentDeleteError] = useState('')
   const [asking, setAsking] = useState(false)
-  const [chatStarted, setChatStarted] = useState(false)
-  const [welcomeVisible, setWelcomeVisible] = useState(true)
+  const [initialChatState] = useState(() => {
+    const savedChats = readSavedChats().sort(
+      (a, b) => b.updatedAt - a.updatedAt
+    )
+    const firstChat = savedChats[0]
+
+    return {
+      chats: savedChats,
+      activeChatId: firstChat?.id ?? null,
+      messages: firstChat?.messages ?? [],
+      chatStarted: (firstChat?.messages.length ?? 0) > 0,
+      welcomeVisible: (firstChat?.messages.length ?? 0) === 0,
+    }
+  })
+
+  const [chatStarted, setChatStarted] = useState(initialChatState.chatStarted)
+  const [welcomeVisible, setWelcomeVisible] = useState(initialChatState.welcomeVisible)
   const [welcomeExiting, setWelcomeExiting] = useState(false)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [chats, setChats] = useState<ChatSession[]>([])
-  const [activeChatId, setActiveChatId] = useState<string | null>(null)
-  const [chatsLoaded, setChatsLoaded] = useState(false)
+  const [messages, setMessages] = useState<ChatMessage[]>(initialChatState.messages)
+  const [savedChats, setSavedChats] = useState<ChatSession[]>(initialChatState.chats)
+  const [activeChatId, setActiveChatId] = useState<string | null>(initialChatState.activeChatId)
   const [selectedDocumentId, setSelectedDocumentId] = useState('all')
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('smart')
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [chatError, setChatError] = useState('')
   const conversationEndRef = useRef<HTMLDivElement>(null)
 
-  // Restore local chat history on startup.
-  useEffect(() => {
-    const saved = readSavedChats().sort((a, b) => b.updatedAt - a.updatedAt)
-    setChats(saved)
-    if (saved.length > 0) {
-      setActiveChatId(saved[0].id)
-      setMessages(saved[0].messages)
-      setChatStarted(saved[0].messages.length > 0)
-      setWelcomeVisible(saved[0].messages.length === 0)
+  // Keep the active conversation in the sidebar list.
+  const chats = useMemo(() => {
+    if (!activeChatId || messages.length === 0) {
+      return savedChats
     }
-    setChatsLoaded(true)
-  }, [])
-
-  // Keep the active conversation in the sidebar list whenever messages change.
-  useEffect(() => {
-    if (!chatsLoaded || !activeChatId || messages.length === 0) return
 
     const nextChat: ChatSession = {
       id: activeChatId,
       title: makeChatTitle(messages),
-      updatedAt: Date.now(),
+      updatedAt: savedChats.find((chat) => chat.id === activeChatId)?.updatedAt ?? 0,
       messages,
     }
 
-    setChats((current) => [
+    return [
       nextChat,
-      ...current.filter((chat) => chat.id !== activeChatId),
-    ])
-  }, [messages, activeChatId, chatsLoaded])
+      ...savedChats.filter((chat) => chat.id !== activeChatId),
+    ]
+  }, [savedChats, activeChatId, messages])
 
-  // Persist chat history whenever the list changes, including newly created chats.
+  // Persist chat history whenever it changes.
   useEffect(() => {
-    if (!chatsLoaded) return
     try {
       window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chats))
     } catch {
       // Keep the current conversation usable if browser storage is unavailable.
     }
-  }, [chats, chatsLoaded])
+  }, [chats])
 
   // Restore the signed-in session before loading any private workspace data.
   useEffect(() => {
@@ -259,10 +261,16 @@ function App() {
 
     getCurrentUser()
       .then((user) => {
-        if (!cancelled) setCurrentUser(user)
+        if (!cancelled) {
+          setCurrentUser(user)
+          setDocumentsLoading(Boolean(user))
+        }
       })
       .catch(() => {
-        if (!cancelled) setCurrentUser(null)
+        if (!cancelled) {
+          setCurrentUser(null)
+          setDocumentsLoading(false)
+        }
       })
       .finally(() => {
         if (!cancelled) setAuthChecking(false)
@@ -275,14 +283,9 @@ function App() {
 
   // Only request documents after the backend confirms an authenticated session.
   useEffect(() => {
-    if (!currentUser) {
-      setDocuments([])
-      setDocumentsLoading(false)
-      return
-    }
+    if (!currentUser) return
 
     let cancelled = false
-    setDocumentsLoading(true)
     getDocuments()
       .then((data) => {
         if (cancelled) return
@@ -305,6 +308,12 @@ function App() {
   const handleAuthenticated = async () => {
     try {
       const user = await getCurrentUser()
+
+      setShowIntro(
+        !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      )
+
+      setDocumentsLoading(true)
       setCurrentUser(user)
       setActiveView('chat')
       setDocumentsError('')
@@ -321,8 +330,9 @@ function App() {
       setCurrentUser(null)
       setActiveView('chat')
       setDocuments([])
+      setDocumentsLoading(false)
       setMessages([])
-      setChats([])
+      setSavedChats([])
       setActiveChatId(null)
     } catch (error) {
       setProfileError(error instanceof Error ? error.message : 'Logout failed. Please try again.')
@@ -386,7 +396,7 @@ function App() {
   }
 
   const deleteSavedChat = (chatId: string) => {
-    setChats((current) => current.filter((chat) => chat.id !== chatId))
+    setSavedChats((current) => current.filter((chat) => chat.id !== chatId))
     if (activeChatId === chatId) {
       setActiveChatId(null)
       setMessages([])
@@ -695,7 +705,7 @@ function App() {
         >
           <Plus size={18} />
           <span>New chat</span>
-          <span className="shortcut">↵</span>
+          <span className="shortcut">â†µ</span>
         </button>
 
         <div className="sidebar-nav">
@@ -976,6 +986,7 @@ function App() {
                             <div className="chat-message-content">
                               {chatMessage.role === 'assistant' ? (
                                 <TypewriterMarkdown
+                                  key={chatMessage.id}
                                   text={chatMessage.content.replace(/\\(?=\s*$)/gm, '')}
                                 />
                               ) : (
@@ -1013,7 +1024,7 @@ function App() {
                                           {source.document_name}
                                         </span>
                                         <span className="chat-source-location">
-                                        | Page {source.page_number ?? source.location ?? '—'}
+                                        | Page {source.page_number ?? source.location ?? 'â€”'}
                                         </span>
                                       </div>
                                     ))}
@@ -1049,7 +1060,7 @@ function App() {
 
                         {asking && (
                           <div className="chat-thinking" role="status">
-                            IRIS is thinking and checking your documents…
+                            IRIS is thinking and checking your documentsâ€¦
                           </div>
                         )}
 
@@ -1084,7 +1095,7 @@ function App() {
                       event.currentTarget.form?.requestSubmit()
                     }
                   }}
-                  placeholder="Message IRIS — ask anything or ask about your documents..."
+                  placeholder="Message IRIS â€” ask anything or ask about your documents..."
                   rows={2}
                   aria-label="Message IRIS"
                 />
@@ -1293,7 +1304,7 @@ function App() {
                         onClick={() => void handleDeleteDocument(document)}
                       >
                         {deletingDocumentId === document.id ? (
-                          <span className="delete-document-loading">…</span>
+                          <span className="delete-document-loading">â€¦</span>
                         ) : (
                           <Trash2 size={16} />
                         )}
@@ -1308,7 +1319,7 @@ function App() {
 
         <footer className="app-footer">
           <span>
-            IRIS <span className="footer-dot">·</span> Intelligent Retrieval
+            IRIS <span className="footer-dot">Â·</span> Intelligent Retrieval
             &amp; Insight System
           </span>
 
@@ -1330,8 +1341,6 @@ function TypewriterMarkdown({ text }: { text: string }) {
   const [displayedText, setDisplayedText] = useState('')
 
   useEffect(() => {
-    setDisplayedText('')
-
     let index = 0
     let timer = 0
     let cancelled = false
@@ -1382,3 +1391,4 @@ function TypewriterMarkdown({ text }: { text: string }) {
 
 
 export default App
+

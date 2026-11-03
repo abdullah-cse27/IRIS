@@ -1,9 +1,15 @@
 groq==1.7.0
 fastapi
 uvicorn[standard]
+pydantic
 pydantic-settings
+python-dotenv
 sqlalchemy
 python-multipart
 pymupdf
 python-docx
 tavily-python
+
+# Testing
+pytest
+httpx

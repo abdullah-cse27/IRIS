@@ -1,43 +1,37 @@
-
-.env
-.venv/
-__pycache__/
-*.py[cod]
-backend/data/*.db
-backend/data/*.sqlite3
-
-# Environment secrets
+# Environment variables and secrets
 .env
 .env.*
 !.env.example
 
-# Python backend
+# Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Local databases
-backend/data/*.db
-backend/data/*.sqlite3
+# Databases and local data
+*.db
+*.sqlite
+*.sqlite3
+backend/uploads/
+backend/data/uploads/
+uploads/
 
-# Frontend-specific generated files
+# Frontend
 frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
 frontend/.vite/
 
-# Editor and operating system
+# Logs and temporary files
+*.log
+*.tmp
+
+# Editors and operating systems
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-
-# User uploaded documents and files
-backend/uploads/
-backend/data/uploads/
-uploads/
-
-# Logs and temporary files
-*.log
-*.tmp
