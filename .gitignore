@@ -32,3 +32,12 @@ frontend/.vite/
 .idea/
 .DS_Store
 Thumbs.db
+
+# User uploaded documents and files
+backend/uploads/
+backend/data/uploads/
+uploads/
+
+# Logs and temporary files
+*.log
+*.tmp
