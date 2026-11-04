@@ -164,7 +164,13 @@ export function askAssistant(payload: {
     },
     body: JSON.stringify({
       question: payload.question,
-      history: payload.history ?? [],
+      history: (payload.history ?? []).slice(-12).map((message) => ({
+        role: message.role,
+        content:
+          message.content.length > 3900
+            ? `${message.content.slice(0, 3900)}\n[Earlier message shortened for context.]`
+            : message.content,
+      })),
       mode: payload.mode,
       web_search_enabled: payload.web_search_enabled,
       document_id: payload.document_id,

@@ -168,7 +168,7 @@ function readSavedChats(): ChatSession[] {
 function makeChatTitle(messages: ChatMessage[]): string {
   const firstQuestion = messages.find((item) => item.role === 'user')?.content
   if (!firstQuestion) return 'New conversation'
-  return firstQuestion.length > 32 ? `${firstQuestion.slice(0, 32).trim()}â€¦` : firstQuestion
+  return firstQuestion.length > 32  ? `${firstQuestion.slice(0, 32).trim()}\u2026` : firstQuestion
 }
 
 
@@ -705,7 +705,7 @@ function App() {
         >
           <Plus size={18} />
           <span>New chat</span>
-          <span className="shortcut">â†µ</span>
+          <span className="shortcut">&#8629;</span>
         </button>
 
         <div className="sidebar-nav">
@@ -1024,7 +1024,7 @@ function App() {
                                           {source.document_name}
                                         </span>
                                         <span className="chat-source-location">
-                                        | Page {source.page_number ?? source.location ?? 'â€”'}
+                                        | Page {source.page_number ?? source.location ?? '\u2014'}
                                         </span>
                                       </div>
                                     ))}
@@ -1060,7 +1060,7 @@ function App() {
 
                         {asking && (
                           <div className="chat-thinking" role="status">
-                            IRIS is thinking and checking your documentsâ€¦
+                            IRIS is thinking and checking your documents&hellip;
                           </div>
                         )}
 
@@ -1095,7 +1095,7 @@ function App() {
                       event.currentTarget.form?.requestSubmit()
                     }
                   }}
-                  placeholder="Message IRIS â€” ask anything or ask about your documents..."
+                  placeholder="Message IRIS &mdash; ask anything or ask about your documents..."
                   rows={2}
                   aria-label="Message IRIS"
                 />
@@ -1304,7 +1304,7 @@ function App() {
                         onClick={() => void handleDeleteDocument(document)}
                       >
                         {deletingDocumentId === document.id ? (
-                          <span className="delete-document-loading">â€¦</span>
+                          <span className="delete-document-loading">&hellip;</span>
                         ) : (
                           <Trash2 size={16} />
                         )}
@@ -1319,7 +1319,7 @@ function App() {
 
         <footer className="app-footer">
           <span>
-            IRIS <span className="footer-dot">Â·</span> Intelligent Retrieval
+            IRIS <span className="footer-dot">&middot;</span> Intelligent Retrieval
             &amp; Insight System
           </span>
 

@@ -14,7 +14,8 @@ from app.auth import router as auth_router, get_current_user
 from app.config import settings
 from app.database import Base, engine, get_db
 from app import models  # Ensure all SQLAlchemy models are registered.
-from app.models import Document, DocumentChunk, User
+from app.models import Document, DocumentChunk, DocumentBlock, User
+from app.document_structure_service import build_document_blocks
 from app.document_service import extract_pages
 from app.chunking_service import chunk_pages
 from app.retrieval_service import search_chunks
@@ -173,6 +174,21 @@ async def upload_document(
             ) from None
 
         # Critical isolation field: assign the authenticated user's ID.
+        # Generate document blocks and chunks before saving.
+        document_blocks = build_document_blocks(source_pages)
+        chunks = chunk_pages(
+            source_pages,
+            chunk_size=500,
+            overlap=100,
+        )
+
+        if not chunks:
+            raise HTTPException(
+                status_code=422,
+                detail="No readable text found to index in this document.",
+            )
+
+        # Assign the authenticated user's ID.
         document = Document(
             user_id=current_user.id,
             filename=filename,
@@ -183,6 +199,39 @@ async def upload_document(
         )
 
         db.add(document)
+        db.flush()
+        
+        block_records = [
+            DocumentBlock(
+                document_id=document.id,
+                block_index=block["block_index"],
+                block_type=block["block_type"],
+                text=block["text"],
+                page_number=block["page_number"],
+                parent_id=block["parent_id"],
+                metadata_json=json.dumps(
+                    block["metadata_json"],
+                    ensure_ascii=False,
+                ),
+            )
+            for block in document_blocks
+        ]
+
+        db.add_all(block_records)
+
+
+        chunk_records = [
+            DocumentChunk(
+                document_id=document.id,
+                chunk_index=index,
+                text=chunk["text"],
+                page_number=chunk["page_number"],
+                location=chunk["location"],
+            )
+            for index, chunk in enumerate(chunks)
+        ]
+
+        db.add_all(chunk_records)
         db.commit()
         db.refresh(document)
 
@@ -193,6 +242,8 @@ async def upload_document(
             "file_type": document.file_type,
             "file_size": document.file_size,
             "text_char_count": len(extracted_text),
+            "total_chunks": len(chunks),
+            "total_blocks": len(document_blocks),
         }
 
     except HTTPException:
@@ -490,6 +541,7 @@ def ask_question(
     db: Session = Depends(get_db),
 ):
     question = request.question.strip()
+    print("DEBUG authenticated user ID:", current_user.id)
 
     if not question:
         raise HTTPException(
@@ -779,7 +831,16 @@ def generate_smart_answer(
             "9. Answer the user's question directly and concisely. Use a "
             "table or bullets only when useful.\n"
             "10. Never claim that you verified a page or checked information "
-            "that is not present in the supplied results."
+            "that is not present in the supplied results.\n"
+            "11. Keep simple answers to 2-5 sentences whenever sufficient. "
+            "For complex topics, use clear headings and concise explanations.\n"
+            "12. Avoid unnecessary repetition, oversized introductions, and "
+            "unrequested cheat sheets.\n"
+            "13. For programming questions, provide complete, syntactically "
+            "valid code examples. Never intentionally stop midway through "
+            "a code block, sentence, or explanation.\n"
+            "14. Preserve important details, accuracy, and relevant source "
+            "links. Do not sacrifice completeness merely to shorten an answer."
         )
 
         user_content = (
@@ -799,7 +860,22 @@ def generate_smart_answer(
             "naturally, accurately, and directly. Use conversation history for "
             "follow-ups. Do not claim to have searched the web unless search "
             "results were supplied in the current request. If you cannot reliably "
-            "answer a question, say so."
+            "answer a question, say so. "
+
+            "RESPONSE LENGTH AND FORMATTING RULES: "
+            "1. Keep simple factual answers short, usually 2-5 sentences. "
+            "2. For conceptual questions, provide a clear explanation with "
+            "only the headings and examples that genuinely help. "
+            "3. Avoid repeating the same information in different sections. "
+            "4. Prefer concise explanations over unnecessarily long essays. "
+            "5. For programming questions, provide complete and syntactically "
+            "valid code examples. Never intentionally stop midway through a "
+            "code block, statement, list, or sentence. "
+            "6. Do not add a large cheat sheet or unrelated best-practice "
+            "section unless the user asks for it. "
+            "7. Follow the user's requested level of detail. "
+            "8. Never sacrifice correctness or completeness just to make "
+            "an answer shorter."
         )
         user_content = question
 
@@ -823,11 +899,22 @@ def generate_smart_answer(
         max_tokens=1200,
     )
 
-    answer = (response.choices[0].message.content or "").strip()
+    choice = response.choices[0]
+    answer = (choice.message.content or "").strip()
+
     if not answer:
         raise HTTPException(
             status_code=503,
             detail="The AI service returned an empty response.",
+        )
+
+    if choice.finish_reason == "length":
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The response reached its generation limit before it "
+                "could finish. Please ask for a shorter or more focused answer."
+            ),
         )
 
     return answer

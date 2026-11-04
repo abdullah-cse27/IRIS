@@ -42,11 +42,16 @@ class Document(Base):
     )
 
     owner: Mapped["User | None"] = relationship()
-
     chunks: Mapped[list["DocumentChunk"]] = relationship(
-        back_populates="document",
-        cascade="all, delete-orphan",
+    back_populates="document",
+    cascade="all, delete-orphan",
     )
+
+    blocks: Mapped[list["DocumentBlock"]] = relationship(
+    back_populates="document",
+    cascade="all, delete-orphan",
+    order_by="DocumentBlock.block_index",
+)
 
 
 
@@ -84,6 +89,64 @@ class DocumentChunk(Base):
         back_populates="chunks",
     )
 
+class DocumentBlock(Base):
+    __tablename__ = "document_blocks"
+    __table_args__ = (
+        Index(
+            "ix_document_blocks_document_index",
+            "document_id",
+            "block_index",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    block_index: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    block_type: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+    )
+
+    text: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+    )
+
+    page_number: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("document_blocks.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    metadata_json: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="{}",
+    )
+
+    document: Mapped["Document"] = relationship(
+        back_populates="blocks",
+    )
 
 class User(Base):
     __tablename__ = "users"

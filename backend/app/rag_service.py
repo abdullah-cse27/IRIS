@@ -86,17 +86,22 @@ def generate_answer(
     # Step 4: Build context with document locations.
     context_parts = []
 
-    for index, chunk in enumerate(retrieved_chunks, start=1):
-        if chunk["page_number"] is not None:
-            location = f"Page {chunk['page_number']}"
-        elif chunk["location"]:
-            location = chunk["location"]
+    for index, item in enumerate(retrieved_chunks, start=1):
+        if item["page_number"] is not None:
+            location = f"Page {item['page_number']}"
+        elif item.get("location"):
+            location = item["location"]
         else:
             location = "Location unavailable"
 
+        result_type = item.get("result_type", "chunk")
+        block_type = item.get("block_type")
+
         context_parts.append(
-            f"[Context {index} | Document: {chunk['document_name']} "
-            f"| {location}]\n{chunk['text']}"
+            f"[Context {index} | Document: {item['document_name']} "
+            f"| Type: {result_type} "
+            f"| Structure: {block_type or 'general'} "
+            f"| {location}]\n{item['text']}"
         )
 
     context = "\n\n".join(context_parts)
@@ -162,16 +167,20 @@ def generate_answer(
     # Step 6: Return source metadata separately from the answer.
     sources = [
         {
-            "document_id": chunk["document_id"],
-            "document_name": chunk["document_name"],
-            "chunk_id": chunk["chunk_id"],
-            "chunk_index": chunk["chunk_index"],
-            "page_number": chunk["page_number"],
-            "location": chunk["location"],
-            "text": chunk["text"],
-            "score": chunk["score"],
+            "document_id": item["document_id"],
+            "document_name": item["document_name"],
+            "chunk_id": item.get("chunk_id"),
+            "block_id": item.get("block_id"),
+            "result_type": item.get("result_type", "chunk"),
+            "block_type": item.get("block_type"),
+            "chunk_index": item.get("chunk_index"),
+            "page_number": item["page_number"],
+            "location": item["location"],
+            "text": item["text"],
+            "score": item["score"],
+            "rrf_score": item.get("rrf_score"),
         }
-        for chunk in retrieved_chunks
+        for item in retrieved_chunks
     ]
 
     return {
